@@ -14,14 +14,14 @@ with open('./emojis.json', 'r') as f:
         emojis[key] = {e: (0 if e not in value else value[e]) for e in common.index}
 
     output = []
-    for emoji in common.index:
-        emoji_obj = {}
-        emoji_obj['emoji'] = emoji
-        emoji_obj['data'] = {}
-        for e in common.index:
-            emoji_obj['data'][e] = emojis[e][emoji]
+    with open('./emoji-urls.json', 'r') as g:
+        emoji_urls = json.load(g)
 
-        output.append(emoji_obj)
+        for emoji in common.index:
+            emoji_obj = {'emoji': emoji, 'url': emoji_urls[emoji], 'data': {}}
+            for e in common.index:
+                emoji_obj['data'][e] = emojis[e][emoji]
+            output.append(emoji_obj)
 
-    with open('./clean_emojis.json', 'w') as g:
+    with open('src/emoji-cooccurrence/clean_emojis.json', 'w') as g:
         json.dump(output, g)
