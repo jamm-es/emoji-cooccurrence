@@ -6,13 +6,6 @@ cdn_url = 'https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/'
 
 
 def emoji_to_url(emoji):
-    # remove variant selector from single emojis
-    if len(emoji) == 2 and emoji[1] == '\ufe0f':
-        emoji = emoji[0]
-    # remove variant selector from keycap emojis
-    elif len(emoji) == 3 and emoji[2] == '\u20e3':
-        emoji = emoji[0] + emoji[2]
-
     hex_list = []
     for char in emoji:
         hex_list.append(hex(ord(char))[2:])

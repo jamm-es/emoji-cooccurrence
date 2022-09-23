@@ -26,3 +26,6 @@ raw_data
 RC_2022-07
 .idea
 emojis.json
+emoji_urls.json
+errored_urls.json
+NEW_emojis.json
