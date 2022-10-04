@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Fuse from 'fuse.js';
 import cleanEmojiData from './clean_emojis.json';
@@ -26,13 +26,26 @@ function EmojiCooccurrence() {
   const inputElement = useRef<HTMLInputElement>(null);
 
   const [searchInput, setSearchInput] = useState<string>('');
-  const [emojiFilter, setEmojiFilter] = useState<string>('');
+  const [emojiFilter, setEmojiFilter] = useState<string>();
   const [autocompleteResults, setAutocompleteResults] = useState<EmojiSearch[]>([]);
   const [searchInputFocused, setSearchInputFocused] = useState<boolean>(false);
 
   // @ts-ignore
-  const baseEmojiData: Emoji[] = useMemo(() => cleanEmojiData.map((d: any) => ({ ...d, x: 50, y: 50, s: 0 })), []);
+  const baseEmojiData: Emoji[] = useMemo(() => cleanEmojiData.map((d: any) => ({ ...d, x: NaN, y: NaN, s: 0 })), []);
   const fuse = useMemo(() => new Fuse(searchData, { keys: ['emoji', 'name'] }), []);
+  const forceClump = useMemo(() => d3.forceManyBody().strength(0.1), []);
+  const simulation = useMemo(() => d3.forceSimulation([] as Emoji[])
+    .force('collide', d3.forceCollide(d => d.s/2))
+    .force('center', d3.forceCenter(0, 0))
+    .force('clump', forceClump)
+    .alphaDecay(0)
+    .on('tick',() => {
+      d3.select(svgElement.current)
+        .selectAll('g')
+        .attr('transform', (d: any) => {
+          return `translate(${d.x}, ${d.y})`;
+        });
+    }), []);
 
   // initial setup
   useLayoutEffect(() => {
@@ -44,16 +57,6 @@ function EmojiCooccurrence() {
       .attr('viewBox', [-750, -750, 1500, 1500])
       .attr('width', 800)
       .attr('height', 800);
-
-    const simulation = d3.forceSimulation(baseEmojiData)
-      .force('collide', d3.forceCollide(d => d.s/2))
-      .force('center', d3.forceCenter(0, 0))
-      .alphaDecay(0)
-      .on('tick',() => {
-        d3.select(svgElement.current)
-          .selectAll('g')
-          .attr('transform', (d: any) => `translate(${d.x}, ${d.y})`);
-      });
   }, []);
 
   // regenerate/change bubbles upon filter update
@@ -62,12 +65,11 @@ function EmojiCooccurrence() {
     // filters emojiData to remove tiny emoji bubbles to improve performance.
     // min/max sizes are set in config.json
     const max = Math.max(...baseEmojiData.map(d => d.data[emojiFilter ?? d.emoji]));
-    const filteredData: Emoji[] = baseEmojiData.map(d => ({
-      ...d,
-      s: Math.sqrt(d.data[emojiFilter ?? d.emoji] / max) * config.maxSize
-    }))
+    const filteredData: Emoji[] = baseEmojiData.map(d => {
+      d.s = Math.sqrt(d.data[emojiFilter ?? d.emoji] / max) * config.maxSize;
+      return d;
+    })
       .filter(d => d.s >= config.minSize);
-    console.log(filteredData);
 
     // update emoji circles via join with filtered data
     const emojis = d3.select(svgElement.current)
@@ -81,6 +83,7 @@ function EmojiCooccurrence() {
           g.append('svg:circle')
             .attr('opacity', 0)
             .attr('r', 0)
+            //.on('click', (_, d) => setEmojiFilter(d.emoji))
             .transition()
             .duration(1000)
             .attr('r', d => d.s/2);
@@ -91,6 +94,7 @@ function EmojiCooccurrence() {
             .attr('height', 0)
             .attr('x', 0)
             .attr('y', 0)
+            .on('click', (_, d) => setEmojiFilter(d.emoji))
             .transition()
             .duration(1000)
             .attr('width', d => d.s)
@@ -104,7 +108,7 @@ function EmojiCooccurrence() {
           update.select('circle')
             .transition()
             .duration(1000)
-            .attr('r', d => d.s/2)
+            .attr('r', d => d.s/2);
 
           update.select('image')
             .transition()
@@ -137,8 +141,9 @@ function EmojiCooccurrence() {
           return exit;
         }
       );
+    simulation.nodes(filteredData);
 
-  }, [baseEmojiData, emojiFilter]);
+  }, [emojiFilter]);
 
   // handles emoji search
   useEffect(() => {
@@ -165,7 +170,7 @@ function EmojiCooccurrence() {
   }, [searchInput]);
 
   return (
-    <main>
+    <main onClick={() => setSearchInputFocused(false)}>
       <div className='m-3'>
         <input
           className='form-control'
@@ -173,14 +178,20 @@ function EmojiCooccurrence() {
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
           onFocus={() => setSearchInputFocused(true)}
-          onBlur={() => setSearchInputFocused(false)}
+          onClick={e => {
+            e.stopPropagation();
+            setSearchInputFocused(true);
+          }}
           ref={inputElement}
         />
         {/*
           Autocomplete results are only shown when the search input box is active and there are actual results to show
         */}
-        {searchInputFocused && autocompleteResults.length !== 0 && <div className='list-group position-relative'>
-          {autocompleteResults.map(d => <button key={d.emoji} className='list-group-item list-group-item-action'>
+        {searchInputFocused && autocompleteResults.length !== 0 && <div className='list-group position-absolute'>
+          {autocompleteResults.map(d => <button key={d.emoji} onClick={() => {
+            setSearchInput(d.name);
+            setEmojiFilter(d.emoji);
+          }} className='list-group-item list-group-item-action'>
             {`${d.emoji} - ${d.name} - ${d.freq} - ${baseEmojiData.find(e => e.emoji === d.emoji)!.url}`}
           </button>)}
         </div>}
