@@ -6,6 +6,7 @@ from dateutil import rrule
 from urllib import parse
 import io
 import zstandard as zstd
+import os
 
 # defines month/year range to download
 START_YEAR = 2005
@@ -15,7 +16,7 @@ END_MONTH = 8
 
 
 DOWNLOAD_URL = 'https://files.pushshift.io/reddit/comments/'
-OUT_PATH = './out.json'
+OUT_DIR = './out/'
 
 
 def unify_emoji_variant(emoji):
@@ -36,6 +37,14 @@ emojis = {}
 
 # download comments archive for each month
 for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
+
+    # check for existing as_of saved files for graceful restart
+    emojis_checkpoint_path = os.path.join(OUT_DIR, f'as_of_{dt.year}_{dt.month}.json')
+    if os.path.exists(emojis_checkpoint_path):
+        print(f'Loading checkpoint from {emojis_checkpoint_path}')
+        with open(emojis_checkpoint_path, 'w') as f:
+            emojis = json.load(f)
+        continue
 
     # efficiency stream download
     url = parse.urljoin(DOWNLOAD_URL, f'RC_{dt.year}-{str(dt.month).zfill(2)}.zst')
@@ -72,9 +81,11 @@ for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
             if lines_processed % 1000000 == 0:
                 print(f'{lines_processed} lines processed in {datetime.now()-start_time}', flush=True)
 
-        print(f'Finished year {dt.year}, month {dt.month} in {datetime.now()-start_time}', flush=True)
+    print(f'Finished year {dt.year}, month {dt.month} in {datetime.now()-start_time}', flush=True)
 
-with open(OUT_PATH, 'w') as f:
+    # save checkpoint
+    with open(emojis_checkpoint_path, 'w') as f:
+        json.dump(emojis, f)
+
+with open(os.path.join(OUT_DIR, 'emoji_final.json')) as f:
     json.dump(emojis, f)
-
-#%%
