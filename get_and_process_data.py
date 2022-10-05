@@ -42,7 +42,7 @@ for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
     emojis_checkpoint_path = os.path.join(OUT_DIR, f'as_of_{dt.year}_{dt.month}.json')
     if os.path.exists(emojis_checkpoint_path):
         print(f'Loading checkpoint from {emojis_checkpoint_path}')
-        with open(emojis_checkpoint_path, 'w') as f:
+        with open(emojis_checkpoint_path, 'r') as f:
             emojis = json.load(f)
         continue
 
@@ -85,7 +85,11 @@ for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
 
     # save checkpoint
     with open(emojis_checkpoint_path, 'w') as f:
-        json.dump(emojis, f)
+        # results in empty file being written, which causes an exception when read as json
+        if len(emojis) != 0:
+            json.dump(emojis, f)
 
 with open(os.path.join(OUT_DIR, 'emoji_final.json')) as f:
     json.dump(emojis, f)
+
+#%%
