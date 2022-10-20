@@ -63,8 +63,8 @@ for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
             try:
                 comment = json.loads(line)
             except Exception as e:
-                print(e)
-                print(f'Failed json decode on {line}')
+                print(e, flush=True)
+                print(f'Failed json decode on {line}', flush=True)
                 continue
             if 'body' in comment:
                 comment_emojis = distinct_emoji_list(comment['body'])
@@ -89,7 +89,5 @@ for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date):
         if len(emojis) != 0:
             json.dump(emojis, f)
 
-with open(os.path.join(OUT_DIR, 'emoji_final.json')) as f:
+with open(os.path.join(OUT_DIR, 'emoji_final.json'), 'w') as f:
     json.dump(emojis, f)
-
-#%%
