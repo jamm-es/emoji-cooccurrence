@@ -5,12 +5,11 @@ import cleanEmojiData from './clean_emojis.json';
 import config from './config.json';
 import searchData from './emoji_search.json';
 import './emoji-cooccurrence.scss';
-import { filter } from "d3";
 
 interface Emoji {
   x: number,
   y: number,
-  s: number
+  s: number,
   emoji: string,
   url: string,
   data: { [emoji: string]: number },
@@ -26,6 +25,7 @@ interface EmojiSearch {
   freq: number
 }
 
+const viewboxRadius = 750;
 const transitionDuration = 1000;
 const transitionEase = d3.easeCubic;
 
@@ -42,15 +42,13 @@ function EmojiCooccurrence() {
   const baseEmojiData: Emoji[] = useMemo(() => cleanEmojiData.map((d: any) => ({ ...d, x: NaN, y: NaN, s: 0 })), []);
   const fuse = useMemo(() => new Fuse(searchData, { keys: ['emoji', 'name'] }), []);
   const forceLink = useMemo(() => d3.forceLink()
-    .id((d: any) => d.emoji)
+      .id((d: any) => d.emoji)
       .strength(0.01)
-    .distance((l: any) => {
-      return 200 / l.target.s*20+l.source.s/2;
-    })
-  , []);
+    , []);
   const simulation = useMemo(() => d3.forceSimulation([] as Emoji[])
     .force('collide', d3.forceCollide(d => d.s/2))
     .force('link', forceLink)
+    .force('center', d3.forceCenter())
     .alphaDecay(0)
     .on('tick',() => {
       d3.select(svgElement.current)
@@ -67,7 +65,7 @@ function EmojiCooccurrence() {
     // adds x, y (initial position), s (diameter), url (to emoji image location)
 
     d3.select(svgElement.current)
-      .attr('viewBox', [-750, -750, 1500, 1500])
+      .attr('viewBox', [-viewboxRadius, -viewboxRadius, 2*viewboxRadius, 2*viewboxRadius])
       .attr('width', 800)
       .attr('height', 800);
   }, []);
@@ -84,34 +82,59 @@ function EmojiCooccurrence() {
       d.fy = undefined;
       return d;
     })
-      .filter(d => d.s >= config.minSize);
+      .filter(d => d.s >= config.minSize)
+      .sort((a, b) => b.s - a.s)
+      .filter((_, i) => i < config.maxCount);
+
+    const centeredEmoji = filteredData.find(d => d.emoji === emojiFilter)!;
+
+    // re-scale to maintain estimated overall size
+    const estimatedSize = filteredData.reduce((prev, curr) => prev+(curr.s/2)*(curr.s/2)*Math.PI, 0);
+    const estimatedRadius = Math.sqrt(estimatedSize/Math.PI)*1.5;
+    filteredData.forEach(d => {
+      d.s = d.s*viewboxRadius/estimatedRadius;
+    });
 
     // transition selected emoji to be fixed in the center
-    const selectedEmoji = filteredData.find(d => d.emoji === emojiFilter)!;
-    if(selectedEmoji !== undefined) {
-      const interpFX = d3.interpolateNumber(selectedEmoji.x, 0);
-      const interpFY = d3.interpolateNumber(selectedEmoji.y, 0)
+    if(centeredEmoji !== undefined) {
+      const interpFX = d3.interpolateNumber(centeredEmoji.x, 0);
+      const interpFY = d3.interpolateNumber(centeredEmoji.y, 0)
       const t = d3.timer(elapsed => {
         if(elapsed > transitionDuration) {
           t.stop();
         }
         const normalizedTime = elapsed/transitionDuration;
-        selectedEmoji.fx = interpFX(transitionEase(normalizedTime));
-        selectedEmoji.fy = interpFY(transitionEase(normalizedTime));
+        centeredEmoji.fx = interpFX(transitionEase(normalizedTime));
+        centeredEmoji.fy = interpFY(transitionEase(normalizedTime));
       });
       setTimeout(() => {
-        selectedEmoji.fx = 0;
-        selectedEmoji.fy = 0;
+        centeredEmoji.fx = 0;
+        centeredEmoji.fy = 0;
       }, 1000);
     }
 
     // set force linkages with selected emoji filter
     if(emojiFilter !== undefined) {
-      const links = filteredData.filter(d => d.emoji !== emojiFilter)
-        .map(d => ({ source: emojiFilter, target: d.emoji }));
-      console.log(links[0]);
+      const nonCenteredEmojis = filteredData
+        .filter(d => d.emoji !== emojiFilter);
+      const links = nonCenteredEmojis.map(d => ({ source: centeredEmoji, target: d }));
       forceLink.links(links);
+      forceLink.distance((l, i) => {
+        return centeredEmoji.s/2+(l.target as Emoji).s/2*Math.sqrt(0.5+i);
+      });
     }
+
+    // cool off link strength
+    const coolOffTime = 3000;
+    const t = d3.timer(elapsed => {
+      if(elapsed > coolOffTime) {
+        t.stop();
+        forceLink.strength(0);
+      }
+      else {
+        forceLink.strength(0.3*(coolOffTime-elapsed)/coolOffTime);
+      }
+    });
 
     // update emoji circles via join with filtered data
     d3.select(svgElement.current)
@@ -122,10 +145,19 @@ function EmojiCooccurrence() {
           const g = enter.append('svg:g')
             .attr('transform', 'translate(0, 0)');
 
+          // make new emojis fly in, if it's not first initialization
+          enter.data().forEach(d => {
+            if(Number.isFinite(d.x)) { // ensures it's not the first initialization
+              const angle = Math.atan2(d.y, d.x);
+              const radius = viewboxRadius*Math.SQRT2;
+              d.x = Math.cos(angle)*radius;
+              d.y = Math.sin(angle)*radius;
+            }
+          });
+
           g.append('svg:circle')
             .attr('opacity', 0)
             .attr('r', 0)
-            //.on('click', (_, d) => setEmojiFilter(d.emoji))
             .transition()
             .duration(transitionDuration)
             .ease(transitionEase)
@@ -182,9 +214,15 @@ function EmojiCooccurrence() {
             .attr('x', 0)
             .attr('y', 0);
 
+          // makes emoji fly outwards when transitioning out
           exit.transition()
             .duration(1000)
             .ease(transitionEase)
+            .attr('transform', function(d) {
+              const angle = Math.atan2(d.y, d.x);
+              const radius = viewboxRadius*Math.SQRT2;
+              return `translate(${radius*Math.cos(angle)}, ${radius*Math.sin(angle)})`;
+            })
             .remove();
 
           return exit;
