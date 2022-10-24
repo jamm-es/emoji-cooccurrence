@@ -1,5 +1,5 @@
 {
   "maxSize": 200,
-  "minSize": 0,
+  "minSize": 0.01,
   "cdnURL": "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/"
 }

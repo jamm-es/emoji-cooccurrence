@@ -25,8 +25,11 @@ yarn-error.log*
 raw_data
 RC_2022-07
 .idea
-emojis.json
-emoji_urls.json
-errored_urls.json
-NEW_emojis.json
+scripts/emojis.json
+scripts/emoji_urls.json
+scripts/errored_urls.json
+scripts/NEW_emojis.json
+scripts/out.json
+scripts/emoji_final.json
+scripts/emoji_search.json
 /out

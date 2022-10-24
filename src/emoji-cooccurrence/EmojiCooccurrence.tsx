@@ -5,6 +5,7 @@ import cleanEmojiData from './clean_emojis.json';
 import config from './config.json';
 import searchData from './emoji_search.json';
 import './emoji-cooccurrence.scss';
+import { filter } from "d3";
 
 interface Emoji {
   x: number,
@@ -12,7 +13,11 @@ interface Emoji {
   s: number
   emoji: string,
   url: string,
-  data: { [emoji: string]: number }
+  data: { [emoji: string]: number },
+  fx?: number,
+  fy?: number,
+  vx?: number,
+  vy?: number
 }
 
 interface EmojiSearch {
@@ -20,6 +25,9 @@ interface EmojiSearch {
   name: string,
   freq: number
 }
+
+const transitionDuration = 1000;
+const transitionEase = d3.easeCubic;
 
 function EmojiCooccurrence() {
   const svgElement = useRef<SVGSVGElement>(null);
@@ -33,11 +41,16 @@ function EmojiCooccurrence() {
   // @ts-ignore
   const baseEmojiData: Emoji[] = useMemo(() => cleanEmojiData.map((d: any) => ({ ...d, x: NaN, y: NaN, s: 0 })), []);
   const fuse = useMemo(() => new Fuse(searchData, { keys: ['emoji', 'name'] }), []);
-  const forceClump = useMemo(() => d3.forceManyBody().strength(0.1), []);
+  const forceLink = useMemo(() => d3.forceLink()
+    .id((d: any) => d.emoji)
+      .strength(0.01)
+    .distance((l: any) => {
+      return 200 / l.target.s*20+l.source.s/2;
+    })
+  , []);
   const simulation = useMemo(() => d3.forceSimulation([] as Emoji[])
     .force('collide', d3.forceCollide(d => d.s/2))
-    .force('center', d3.forceCenter(0, 0))
-    .force('clump', forceClump)
+    .force('link', forceLink)
     .alphaDecay(0)
     .on('tick',() => {
       d3.select(svgElement.current)
@@ -67,12 +80,41 @@ function EmojiCooccurrence() {
     const max = Math.max(...baseEmojiData.map(d => d.data[emojiFilter ?? d.emoji]));
     const filteredData: Emoji[] = baseEmojiData.map(d => {
       d.s = Math.sqrt(d.data[emojiFilter ?? d.emoji] / max) * config.maxSize;
+      d.fx = undefined;
+      d.fy = undefined;
       return d;
     })
       .filter(d => d.s >= config.minSize);
 
+    // transition selected emoji to be fixed in the center
+    const selectedEmoji = filteredData.find(d => d.emoji === emojiFilter)!;
+    if(selectedEmoji !== undefined) {
+      const interpFX = d3.interpolateNumber(selectedEmoji.x, 0);
+      const interpFY = d3.interpolateNumber(selectedEmoji.y, 0)
+      const t = d3.timer(elapsed => {
+        if(elapsed > transitionDuration) {
+          t.stop();
+        }
+        const normalizedTime = elapsed/transitionDuration;
+        selectedEmoji.fx = interpFX(transitionEase(normalizedTime));
+        selectedEmoji.fy = interpFY(transitionEase(normalizedTime));
+      });
+      setTimeout(() => {
+        selectedEmoji.fx = 0;
+        selectedEmoji.fy = 0;
+      }, 1000);
+    }
+
+    // set force linkages with selected emoji filter
+    if(emojiFilter !== undefined) {
+      const links = filteredData.filter(d => d.emoji !== emojiFilter)
+        .map(d => ({ source: emojiFilter, target: d.emoji }));
+      console.log(links[0]);
+      forceLink.links(links);
+    }
+
     // update emoji circles via join with filtered data
-    const emojis = d3.select(svgElement.current)
+    d3.select(svgElement.current)
       .selectAll('g')
       .data(filteredData, (d: any) => d.emoji)
       .join(
@@ -85,7 +127,8 @@ function EmojiCooccurrence() {
             .attr('r', 0)
             //.on('click', (_, d) => setEmojiFilter(d.emoji))
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('r', d => d.s/2);
 
           g.append('svg:image')
@@ -96,7 +139,8 @@ function EmojiCooccurrence() {
             .attr('y', 0)
             .on('click', (_, d) => setEmojiFilter(d.emoji))
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('width', d => d.s)
             .attr('height', d => d.s)
             .attr('x', d => -d.s/2)
@@ -107,12 +151,14 @@ function EmojiCooccurrence() {
         update => {
           update.select('circle')
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('r', d => d.s/2);
 
           update.select('image')
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('width', d => d.s)
             .attr('height', d => d.s)
             .attr('x', d => -d.s/2)
@@ -123,12 +169,14 @@ function EmojiCooccurrence() {
         exit => {
           exit.select('circle')
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('r', 0)
 
           exit.select('image')
             .transition()
-            .duration(1000)
+            .duration(transitionDuration)
+            .ease(transitionEase)
             .attr('width', 0)
             .attr('height', 0)
             .attr('x', 0)
@@ -136,11 +184,13 @@ function EmojiCooccurrence() {
 
           exit.transition()
             .duration(1000)
+            .ease(transitionEase)
             .remove();
 
           return exit;
         }
       );
+
     simulation.nodes(filteredData);
 
   }, [emojiFilter]);
@@ -170,8 +220,8 @@ function EmojiCooccurrence() {
   }, [searchInput]);
 
   return (
-    <main onClick={() => setSearchInputFocused(false)}>
-      <div className='m-3'>
+    <main onClick={() => setSearchInputFocused(false)} style={{ backgroundColor: '#111111'}}>
+      <div className='m-3 mt-0'>
         <input
           className='form-control'
           type='text'
@@ -197,7 +247,9 @@ function EmojiCooccurrence() {
         </div>}
       </div>
       <div>
-        <svg ref={svgElement} />
+        <div className='d-flex justify-content-center'>
+          <svg ref={svgElement} />
+        </div>
       </div>
     </main>
   );
