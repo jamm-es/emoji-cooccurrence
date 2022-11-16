@@ -31,5 +31,5 @@ scripts/errored_urls.json
 scripts/NEW_emojis.json
 scripts/out.json
 scripts/emoji_final.json
-scripts/emoji_search.json
+src/emoji-cooccurrence/emoji_search.json
 /out

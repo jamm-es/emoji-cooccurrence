@@ -22,7 +22,8 @@ interface Emoji {
 interface EmojiSearch {
   emoji: string,
   name: string,
-  freq: number
+  freq: number,
+  url: string
 }
 
 const viewboxRadius = 750;
@@ -32,15 +33,23 @@ const transitionEase = d3.easeCubic;
 function EmojiCooccurrence() {
   const svgElement = useRef<SVGSVGElement>(null);
   const inputElement = useRef<HTMLInputElement>(null);
+  // const tooltipElement = useRef<HTMLDivElement>(null);
 
   const [searchInput, setSearchInput] = useState<string>('');
   const [emojiFilter, setEmojiFilter] = useState<string>();
   const [autocompleteResults, setAutocompleteResults] = useState<EmojiSearch[]>([]);
   const [searchInputFocused, setSearchInputFocused] = useState<boolean>(false);
+  const [showToolTip, setShowToolTip] = useState<boolean>(false);
+  // const [tooltipIsVisible, setTooltipIsVisible] = useState<boolean>(false);
+  // const [tooltipImageSrc, setTooltipImageSrc] = useState<string>('');
+  // const [tooltipHeader, setTooltipHeader] = useState<string>('');
+  // const [tooltipDetails, setTooltipDetails] = useState<string[]>([]);
 
   // @ts-ignore
   const baseEmojiData: Emoji[] = useMemo(() => cleanEmojiData.map((d: any) => ({ ...d, x: NaN, y: NaN, s: 0 })), []);
+
   const fuse = useMemo(() => new Fuse(searchData, { keys: ['emoji', 'name'] }), []);
+  // const forceRadial = useMemo(() => d3.forceRadial(0).strength(0), []);
   const forceLink = useMemo(() => d3.forceLink()
       .id((d: any) => d.emoji)
       .strength(0.01)
@@ -48,6 +57,7 @@ function EmojiCooccurrence() {
   const simulation = useMemo(() => d3.forceSimulation([] as Emoji[])
     .force('collide', d3.forceCollide(d => d.s/2))
     .force('link', forceLink)
+    //.force('radial', forceRadial)
     .force('center', d3.forceCenter())
     .alphaDecay(0)
     .on('tick',() => {
@@ -58,16 +68,43 @@ function EmojiCooccurrence() {
         });
     }), []);
 
+  // call this function to set the tooltip given an emoji
+  // const showTooltip = (d: Emoji, selected?: Emoji) => {
+  //   const details: string[] = [];
+  //
+  //   // default, initial view (not centered on an emoji)
+  //   if(selected === undefined) {
+  //   }
+  //   // emoji filter is set
+  //   else {
+  //     details.push(`${(d.data[emojiFilter!]/selected.data[emojiFilter!]*100).toFixed(2)}% of comments with ${selected.emoji} also include ${d.emoji}`)
+  //   }
+  //
+  //   setTooltipImageSrc(d.url);
+  //   setTooltipHeader(searchData.find(e => e.emoji === d.emoji)!.name);
+  //   setTooltipDetails(details);
+  //   setTooltipIsVisible(true);
+  // };
+  //
+  // // hides tooltip
+  // const hideTooltip = () => {
+  //   setTooltipIsVisible(false);
+  // }
+
+  // maintains XY position of tooltip
+  // useEffect(() => document.addEventListener('mousemove', e => {
+  //   d3.select(tooltipElement.current)
+  //     .style('top', `${e.clientY+5}px`)
+  //     .style('left', `${e.clientX+5}px`);
+  // }));
+
   // initial setup
   useLayoutEffect(() => {
     // @ts-ignore
     // base array that'll be filtered to remove extraneous emoji bubbles.
     // adds x, y (initial position), s (diameter), url (to emoji image location)
-
     d3.select(svgElement.current)
-      .attr('viewBox', [-viewboxRadius, -viewboxRadius, 2*viewboxRadius, 2*viewboxRadius])
-      .attr('width', 800)
-      .attr('height', 800);
+      .attr('viewBox', [-viewboxRadius, -viewboxRadius, 2*viewboxRadius, 2*viewboxRadius]);
   }, []);
 
   // regenerate/change bubbles upon filter update
@@ -86,7 +123,7 @@ function EmojiCooccurrence() {
       .sort((a, b) => b.s - a.s)
       .filter((_, i) => i < config.maxCount);
 
-    const centeredEmoji = filteredData.find(d => d.emoji === emojiFilter)!;
+    const centeredEmoji = filteredData.find(d => d.emoji === emojiFilter);
 
     // re-scale to maintain estimated overall size
     const estimatedSize = filteredData.reduce((prev, curr) => prev+(curr.s/2)*(curr.s/2)*Math.PI, 0);
@@ -114,7 +151,7 @@ function EmojiCooccurrence() {
     }
 
     // set force linkages with selected emoji filter
-    if(emojiFilter !== undefined) {
+    if(centeredEmoji !== undefined) {
       const nonCenteredEmojis = filteredData
         .filter(d => d.emoji !== emojiFilter);
       const links = nonCenteredEmojis.map(d => ({ source: centeredEmoji, target: d }));
@@ -122,6 +159,9 @@ function EmojiCooccurrence() {
       forceLink.distance((l, i) => {
         return centeredEmoji.s/2+(l.target as Emoji).s/2*Math.sqrt(0.5+i);
       });
+      // forceRadial.radius((d: any, i) => {
+      //   return centeredEmoji.s/2+d.s/2*Math.sqrt(0.5+i);
+      // });
     }
 
     // cool off link strength
@@ -130,9 +170,11 @@ function EmojiCooccurrence() {
       if(elapsed > coolOffTime) {
         t.stop();
         forceLink.strength(0);
+        // forceRadial.strength(0);
       }
       else {
         forceLink.strength(0.3*(coolOffTime-elapsed)/coolOffTime);
+        // forceRadial.strength(0.3*(coolOffTime-elapsed)/coolOffTime);
       }
     });
 
@@ -155,14 +197,6 @@ function EmojiCooccurrence() {
             }
           });
 
-          g.append('svg:circle')
-            .attr('opacity', 0)
-            .attr('r', 0)
-            .transition()
-            .duration(transitionDuration)
-            .ease(transitionEase)
-            .attr('r', d => d.s/2);
-
           g.append('svg:image')
             .attr('href', d => d.url)
             .attr('width', 0)
@@ -178,15 +212,24 @@ function EmojiCooccurrence() {
             .attr('x', d => -d.s/2)
             .attr('y', d => -d.s/2);
 
-          return g;
-        },
-        update => {
-          update.select('circle')
+          g.append('svg:circle')
+            .attr('opacity', 0)
+            .attr('r', 0)
+            .on('click', (_, d) => setEmojiFilter(d.emoji))
+            // .on('mouseenter', (_, d) => {
+            //   showTooltip(d, centeredEmoji);
+            // })
+            // .on('mouseleave', (_, d) => {
+            //   hideTooltip();
+            // })
             .transition()
             .duration(transitionDuration)
             .ease(transitionEase)
-            .attr('r', d => d.s/2);
+            .attr('r', d => d.s/2)
 
+          return g;
+        },
+        update => {
           update.select('image')
             .transition()
             .duration(transitionDuration)
@@ -196,15 +239,18 @@ function EmojiCooccurrence() {
             .attr('x', d => -d.s/2)
             .attr('y', d => -d.s/2);
 
-          return update;
-        },
-        exit => {
-          exit.select('circle')
+          update.select('circle')
+            // .on('mouseenter', (_, d) => {
+            //   showTooltip(d, centeredEmoji);
+            // })
             .transition()
             .duration(transitionDuration)
             .ease(transitionEase)
-            .attr('r', 0)
+            .attr('r', d => d.s/2);
 
+          return update;
+        },
+        exit => {
           exit.select('image')
             .transition()
             .duration(transitionDuration)
@@ -213,6 +259,12 @@ function EmojiCooccurrence() {
             .attr('height', 0)
             .attr('x', 0)
             .attr('y', 0);
+
+          exit.select('circle')
+            .transition()
+            .duration(transitionDuration)
+            .ease(transitionEase)
+            .attr('r', 0)
 
           // makes emoji fly outwards when transitioning out
           exit.transition()
@@ -258,10 +310,37 @@ function EmojiCooccurrence() {
   }, [searchInput]);
 
   return (
-    <main onClick={() => setSearchInputFocused(false)} style={{ backgroundColor: '#111111'}}>
-      <div className='m-3 mt-0'>
+    <main className='vh-100' onClick={() => setSearchInputFocused(false)} style={{ backgroundColor: '#111111'}}>
+      {/*<div className={`alert alert-dark position-fixed ${tooltipIsVisible ? 'd-flex' : 'd-none'}`} ref={tooltipElement}>*/}
+      {/*  <div className='pe-3'>*/}
+      {/*    <img src={tooltipImageSrc} />*/}
+      {/*  </div>*/}
+      {/*  <div>*/}
+      {/*    <h6>{tooltipHeader}</h6>*/}
+      {/*    {tooltipDetails.map(s => <p>{s}</p>)}*/}
+      {/*  </div>*/}
+      {/*</div>*/}
+
+      <div className='position-fixed p-3 text-light top-0 start-0 user-select-none' style={{ pointerEvents: 'none' }}>
+        <h1>Emoji cooccurrence in online comments</h1>
+        <p>basically, "If a comment contains X emoji, what are the chances it also has Y?"</p>
+        <p>click on an emoji to center it</p>
+        <p>bigger surrounding emojis cooccur more frequently</p>
+      </div>
+
+      <div className='position-fixed p-3 text-light top-0 end-0'>
+        <img
+          src='https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/2753.png'
+          style={{ filter: 'grayscale(100%) brightness(2.5)', width: '30px', height: '30px', transition: 'all 0.5s' }}
+          onClick={() => setShowToolTip(true)}
+          id='activate-modal'
+        />
+      </div>
+
+      <div className='position-fixed p-3 d-flex flex-column-reverse bottom-0 start-0' style={{ maxWidth: '500px' }}>
         <input
-          className='form-control'
+          className={`form-control text-light rounded-0 border-secondary shadow-none ${searchInputFocused && autocompleteResults.length !== 0 && 'border-top-0'}`}
+          style={{ backgroundColor: '#292929' }}
           type='text'
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
@@ -270,25 +349,53 @@ function EmojiCooccurrence() {
             e.stopPropagation();
             setSearchInputFocused(true);
           }}
+          placeholder='search...'
           ref={inputElement}
+          id='emoji-cooccurrence-input'
         />
-        {/*
-          Autocomplete results are only shown when the search input box is active and there are actual results to show
-        */}
-        {searchInputFocused && autocompleteResults.length !== 0 && <div className='list-group position-absolute'>
-          {autocompleteResults.map(d => <button key={d.emoji} onClick={() => {
-            setSearchInput(d.name);
-            setEmojiFilter(d.emoji);
-          }} className='list-group-item list-group-item-action'>
-            {`${d.emoji} - ${d.name} - ${d.freq} - ${baseEmojiData.find(e => e.emoji === d.emoji)!.url}`}
+        {searchInputFocused && autocompleteResults.length !== 0 && <div
+          className='list-group rounded-0 border-secondary'
+        >
+          {autocompleteResults.map(d => <button
+            className='list-group-item list-group-item-action border-secondary p-2'
+            style={{ backgroundColor: '#292929', color: '#BBBBBB'}}
+            key={d.emoji}
+            onClick={() => {
+              setSearchInput(d.name);
+              setEmojiFilter(d.emoji);
+            }}
+          >
+            <img src={d.url} style={{ width: '30px', height: '30px' }}/> {d.name}
           </button>)}
         </div>}
       </div>
-      <div>
-        <div className='d-flex justify-content-center'>
-          <svg ref={svgElement} />
+
+      <div className='position-fixed bottom-0 end-0 text-light p-3'>
+        <p className='m-0'>by james / <a href='https://jamesli.io' className='text-light text-decoration-none'>jamesli.io</a></p>
+      </div>
+
+      <div
+        className={`${!showToolTip && 'd-none'} position-fixed top-0 start-0 w-100 h-100`}
+        style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        onClick={() => setShowToolTip(false)}
+      >
+        <div className='text-light mt-3 mx-auto p-3' style={{ backgroundColor: '#333333', width: 'min(500px, 100%)' }}>
+          <p>
+            Data from every reddit comment since August 2022.
+          </p>
+          <p>
+            Bubbles scale such that the overall volume fits on screen.
+          </p>
+          <p className='mb-0'>
+            Created by James - email me! (<a href='mailto:me@jamesli.io' className='text-light'>me@jamesli.io</a>)
+          </p>
         </div>
       </div>
+
+      <div className='d-flex justify-content-center flex-column align-content-center h-100 pt-5'>
+        <svg ref={svgElement} />
+      </div>
+
     </main>
   );
 }
