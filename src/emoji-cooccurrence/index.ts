@@ -1,3 +1,3 @@
-import EmojiCooccurrence from "./EmojiCooccurrenceAnimation";
+import EmojiCooccurrence from "./EmojiCooccurrence";
 
 export default EmojiCooccurrence;
