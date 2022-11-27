@@ -4,9 +4,34 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Emoji Cooccurrence</title>
+    <style>
+      /* based on https://codepen.io/lukaszkups/pen/NQjeVN */
+      #loading-message h2:after {
+        animation: dots 2s linear infinite;
+        content: '';
+      }
+
+      @keyframes dots {
+        0%, 20% {
+          content: '.';
+        }
+        40% {
+          content: '..';
+        }
+        60% {
+          content: '...';
+        }
+        90%, 100% {
+          content: '';
+        }
+      }
+    </style>
   </head>
-  <body>
+  <body style="margin: 0">
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="loading-message" style="position: fixed; display: flex; justify-content: center; align-content: center; width: 100%; height: 100%; background-color: #111111">
+      <h2 style="font-family: sans-serif; color: rgb(248, 249, 250)">loading</h2>
+    </div>
     <div id="root"></div>
   </body>
 </html>

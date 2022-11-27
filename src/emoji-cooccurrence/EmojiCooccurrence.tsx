@@ -105,6 +105,10 @@ function EmojiCooccurrence() {
     // adds x, y (initial position), s (diameter), url (to emoji image location)
     d3.select(svgElement.current)
       .attr('viewBox', [-viewboxRadius, -viewboxRadius, 2*viewboxRadius, 2*viewboxRadius]);
+
+    // remove loading message
+    d3.select(`#loading-message`)
+      .remove();
   }, []);
 
   // regenerate/change bubbles upon filter update
