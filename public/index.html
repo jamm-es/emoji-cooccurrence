@@ -6,7 +6,7 @@
     <title>Emoji Cooccurrence</title>
     <style>
       /* based on https://codepen.io/lukaszkups/pen/NQjeVN */
-      #loading-message h2:after {
+      #loading-message:after {
         animation: dots 2s linear infinite;
         content: '';
       }
@@ -27,11 +27,9 @@
       }
     </style>
   </head>
-  <body style="margin: 0">
+  <body style="margin: 0; background-color: #111111;">
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="loading-message" style="position: fixed; display: flex; justify-content: center; align-content: center; width: 100%; height: 100%; background-color: #111111">
-      <h2 style="font-family: sans-serif; color: rgb(248, 249, 250)">loading</h2>
-    </div>
+    <h2 id="loading-message" style="font-family: sans-serif; color: rgb(248, 249, 250); position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%)">loading</h2>
     <div id="root"></div>
   </body>
 </html>
